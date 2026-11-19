@@ -13,6 +13,7 @@ Anyone with the link sees live prices and full price history without needing the
 - **Live prices.** Stocks refresh every 3 seconds during market hours, crypto around the clock.
 - **Benchmarks.** Nasdaq-100, Dow Jones and S&P 500 (tracked through QQQ, DIA and VOO), plus BTC and ETH.
 - **Market breadth.** A bar showing how many names are up, down or flat.
+- **Add your own stocks.** Type any US stock or ETF ticker into **Add stock**. The site checks that it exists, fills in the company name, and adds a live card under **My stocks**. Each viewer's additions are saved in their own browser (up to 25), so friends can build their own boards without changing yours. Remove a card with its **×**.
 - **Grouping and sorting.** Filter by theme (Semis, AI & Cloud, Storage, Quantum, Big Tech, Space, Crypto, Funds & Metals), search by symbol or name, and sort by biggest losers, gainers, price or A–Z.
 - **Price history.** Click any card for an interactive chart with **1D, 5D, 1M, 6M, YTD, 5Y and Lifetime** ranges, a hover tooltip, and range stats (start, high, low, last, distance from high).
 - **Tick flashes.** Cards flash green or red when the price moves.
@@ -23,7 +24,7 @@ Anyone with the link sees live prices and full price history without needing the
 
 ```mermaid
 flowchart LR
-    B[Visitor's browser<br/>public/index.html] -->|/api/snapshots<br/>/api/bars<br/>/api/crypto<br/>/api/td, /api/quote| F[Netlify Function<br/>netlify/functions/api.mts]
+    B[Visitor's browser<br/>public/index.html] -->|/api/snapshots<br/>/api/bars<br/>/api/crypto<br/>/api/asset<br/>/api/td, /api/quote| F[Netlify Function<br/>netlify/functions/api.mts]
     F -->|keys from env vars| A[Alpaca Market Data<br/>stocks + crypto]
     F -->|key from env var| T[Twelve Data<br/>long history + OTC]
     B -.->|24h baseline| C[CoinGecko]
@@ -42,7 +43,8 @@ flowchart LR
 | Crypto prices and history | Alpaca crypto | Public data |
 | Crypto 24h change | CoinGecko | Public data, best effort |
 | Lifetime history before 2016 | Twelve Data | Free plan: 8 requests/min, 800/day |
-| OTC stock (HGRAF) | Twelve Data quote | Every 2 min in market hours, every 30 min otherwise |
+| OTC stocks (HGRAF, or any you add) | Twelve Data quote | Every 2 min in market hours, every 30 min otherwise |
+| Ticker lookup for **Add stock** | Alpaca assets API | Confirms the symbol and returns the company name |
 
 ## Project structure
 
@@ -98,15 +100,13 @@ Open `public/index.html` in a browser, then paste your keys into the fields at t
 
 ## Customizing the watchlist
 
-Symbols live in two places, and both must match:
-
-1. The `SNAP` array near the top of the script in `public/index.html` (symbol, name, fallback price, fallback % change, group).
-2. The `STOCKS` set in `netlify/functions/api.mts`, which the proxy uses as an allowlist.
+- **Per viewer:** use **Add stock** on the page. Added symbols are stored in that browser's local storage under `sw.custom`.
+- **Default board for everyone:** edit the `SNAP` array near the top of the script in `public/index.html` (symbol, name, fallback price, fallback % change, group), and add the symbol to the `STOCKS` set in `netlify/functions/api.mts`.
 
 ## Security
 
 - API keys are stored only as Netlify environment variables and are used by the server function. They never reach the browser and are not in this repository.
-- The proxy only answers for symbols on the allowlist, so the site can't be used as an open relay to the data APIs.
+- The proxy only accepts well-formed ticker symbols (at most 80 per request) and fixed endpoints, so it can't be used as a general relay to the data APIs. Responses are cached at Netlify's edge to keep usage within the free tiers.
 - If a key is ever exposed, regenerate it at the provider, update it in Netlify, and redeploy.
 
 ## Known limitations

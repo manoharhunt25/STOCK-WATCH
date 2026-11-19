@@ -129,6 +129,15 @@ h1{font:700 26px/1 var(--display);letter-spacing:.02em;margin:0;text-transform:u
 .stats span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .stats b{font:500 14px var(--mono);font-variant-numeric:tabular-nums}
 .sh-src{font-size:11px;color:var(--muted)}
+.addbox{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.addbox input{width:120px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 9px;font:500 13px var(--mono);text-transform:uppercase}
+.addbox input::placeholder{text-transform:none}
+.btn:disabled{opacity:.55;cursor:progress}
+.addmsg{font-size:12px;color:var(--muted)}
+.addmsg.err{color:var(--down)} .addmsg.ok{color:var(--up)}
+.card .tags{display:flex;align-items:center;gap:4px}
+.rm{border:0;background:transparent;color:var(--muted);cursor:pointer;font:500 17px/1 var(--body);padding:1px 5px;border-radius:4px;margin-right:-5px}
+.rm:hover,.rm:focus-visible{color:var(--down);background:var(--down-bg)}
 footer{margin-top:28px;font-size:11px;color:var(--muted);max-width:70ch}
 @media (prefers-reduced-motion: reduce){.card{transition:none}}
 @media (max-width:520px){.keybox input{width:140px}.toolbar input[type=search]{width:100%}}
@@ -190,6 +199,12 @@ footer{margin-top:28px;font-size:11px;color:var(--muted);max-width:70ch}
 <div class="toolbar">
   <div class="chips" id="chips"></div>
   <div class="spacer"></div>
+  <form class="addbox" id="addForm" autocomplete="off">
+    <label for="addSym" class="src">Add stock</label>
+    <input id="addSym" placeholder="e.g. TSLA" maxlength="10" spellcheck="false" autocapitalize="characters">
+    <button class="btn" type="submit" id="addBtn">Add</button>
+    <span class="addmsg" id="addMsg" role="status" aria-live="polite"></span>
+  </form>
   <input type="search" id="q" placeholder="Filter symbol or name">
   <select id="sort" aria-label="Sort">
     <option value="pct-asc">Biggest losers</option>
@@ -201,7 +216,7 @@ footer{margin-top:28px;font-size:11px;color:var(--muted);max-width:70ch}
 <div class="wall" id="wall"></div>
 
 <footer>
-  Stocks and ETFs: Alpaca free feed (IEX real-time trades, refreshed every 3 s). History: Alpaca consolidated bars back to 2016, or Twelve Data when that key is added. Crypto: Alpaca every 4 s with CoinGecko 24-hour baseline. HGRAF (OTC) is priced through Twelve Data every 2 minutes during market hours.
+  Stocks and ETFs: Alpaca free feed (IEX real-time trades, refreshed every 3 s). History: Alpaca consolidated bars back to 2016, or Twelve Data when that key is added. Crypto: Alpaca every 4 s with CoinGecko 24-hour baseline. OTC stocks such as HGRAF are priced through Twelve Data every 2 minutes during market hours. Stocks you add are saved in your own browser only.
   Nasdaq and Dow are tracked through QQQ (Nasdaq-100) and DIA (Dow 30) because free feeds don't carry the index values directly. Prices outside regular hours reflect the last trade. Not investment advice.
 </footer>
 
@@ -262,6 +277,13 @@ SNAP.forEach(([s,n,p,c,g])=>mk(s,n,g,p,c,"stock"));
 mk("QQQ","Invesco QQQ (Nasdaq-100)","Index",null,null,"stock");
 mk("DIA","SPDR Dow Jones ETF","Index",null,null,"stock");
 CRYPTO.forEach(c=>mk(c.sym,c.name,"Crypto",c.px??null,c.pct??null,"crypto"));
+// ---------- Viewer's own stocks (saved in this browser only) ----------
+const MAX_CUSTOM=25, MY="My stocks", TICKER=/^[A-Z][A-Z0-9.]{0,9}$/;
+let custom=[];
+try{ const v=JSON.parse(localStorage.getItem("sw.custom")||"[]");
+  if(Array.isArray(v)) custom=v.filter(c=>c&&TICKER.test(c.sym)&&!S.has(c.sym)).slice(0,MAX_CUSTOM); }catch(e){}
+custom.forEach(c=>mk(c.sym,String(c.name||c.sym).slice(0,80),MY,null,null,"stock"));
+function saveCustom(){ try{ localStorage.setItem("sw.custom",JSON.stringify(custom)); }catch(e){} }
 const WS2SYM = Object.fromEntries(CRYPTO.map(c=>[c.ws,c.sym]));
 const STOCKS = [...S.values()].filter(x=>x.kind==="stock").map(x=>x.sym);
 
@@ -302,7 +324,12 @@ function pushTick(s,px,ts){
 // ---------- UI build ----------
 const GROUPS=["All","Semis","AI & Cloud","Storage","Quantum","Big Tech","Space","Crypto","Funds & Metals","Other"];
 let group=store.get("mw.group")||"All";
-$("chips").innerHTML = GROUPS.map(g=>`<button class="chip" type="button" data-g="${g}" aria-pressed="${g===group}">${g}</button>`).join("");
+function renderChips(){
+  const gs = custom.length ? [GROUPS[0], MY, ...GROUPS.slice(1)] : GROUPS;
+  if(!gs.includes(group)) group="All";
+  $("chips").innerHTML = gs.map(g=>`<button class="chip" type="button" data-g="${g}" aria-pressed="${g===group}">${g}</button>`).join("");
+}
+renderChips();
 $("chips").addEventListener("click",e=>{const b=e.target.closest(".chip"); if(!b) return; group=b.dataset.g; store.set("mw.group",group);
   document.querySelectorAll(".chip").forEach(c=>c.setAttribute("aria-pressed",c.dataset.g===group)); layout();});
 $("sort").value = store.get("mw.sort")||"pct-asc";
@@ -316,16 +343,24 @@ BENCH.forEach(b=>{const el=$("b-"+b.sym); benchEls[b.sym]={px:el.querySelector("
 
 const cardEls={};
 const wallSyms=[...S.values()].filter(s=>s.group!=="Index").map(s=>s.sym);
-wallSyms.forEach(sym=>{
-  const s=S.get(sym); const el=document.createElement("div"); el.className="card"; el.dataset.sym=sym;
-  el.innerHTML=`<div class="top"><span class="sym">${sym}</span><span class="src">snapshot</span></div>
-   <div class="name">${s.name}</div>
+function makeCard(sym){
+  const s=S.get(sym), mine=s.group===MY;
+  const el=document.createElement("div"); el.className="card"; el.dataset.sym=sym;
+  el.innerHTML=`<div class="top"><span class="sym"></span><span class="tags"><span class="src">snapshot</span>${mine?'<button class="rm" type="button">×</button>':""}</span></div>
+   <div class="name"></div>
    <div class="row"><span class="px">—</span><span class="chg fl">—</span></div>
    <svg viewBox="0 0 200 34" preserveAspectRatio="none"></svg>
    <div class="range"><span class="lo">L —</span><span class="bar"><i style="left:50%"></i></span><span class="hi">H —</span></div>`;
+  el.querySelector(".sym").textContent=sym; el.querySelector(".name").textContent=s.name;
   cardEls[sym]={el,px:el.querySelector(".px"),chg:el.querySelector(".chg"),svg:el.querySelector("svg"),src:el.querySelector(".src"),
     lo:el.querySelector(".lo"),hi:el.querySelector(".hi"),mark:el.querySelector(".bar i"),range:el.querySelector(".range")};
-});
+  el.tabIndex=0; el.setAttribute("role","button"); el.setAttribute("aria-label",sym+" price history");
+  el.addEventListener("click",()=>openSheet(sym));
+  el.addEventListener("keydown",ev=>{ if(ev.target===el && (ev.key==="Enter"||ev.key===" ")){ev.preventDefault();openSheet(sym);} });
+  if(mine){ const rm=el.querySelector(".rm"); rm.title="Remove "+sym; rm.setAttribute("aria-label","Remove "+sym+" from your board");
+    rm.addEventListener("click",ev=>{ ev.stopPropagation(); removeStock(sym); }); }
+}
+wallSyms.forEach(makeCard);
 
 function layout(){
   const q=$("q").value.trim().toLowerCase(); const sort=$("sort").value;
@@ -467,7 +502,7 @@ pollCryptoFast();
 setInterval(pollCryptoFast,4000);
 
 // OTC names (HGRAF) via Twelve Data quotes: every 2 min in market hours, every 30 min otherwise (free tier is 800 calls/day)
-const OTC=new Set(["HGRAF"]);
+const OTC=new Set(["HGRAF", ...custom.filter(c=>c.otc).map(c=>c.sym)]);
 async function pollOTC(){
   const viaProxy=PROXY.td; if(!tdKey && !viaProxy) return;
   for(const sym of OTC){
@@ -486,6 +521,74 @@ function startLive(){
   updateBanner();
   if(!hasAlp()){ clearTimeout(snapTimer); feed("wait","Snapshot"); return; }
   feed("wait","Connecting"); snapFails=0; pollSnapshots();
+}
+
+// ---------- Add / remove the viewer's own stocks ----------
+function cleanName(n,sym){
+  return String(n||sym).replace(/\s+(Class [A-Z]\s+)?(Common Stock|Ordinary Shares|Common Shares|Shares)(\s*,.*)?$/i,"")
+    .replace(/\s+American Depositary Shares?.*$/i,"").trim().slice(0,80) || sym;
+}
+async function lookupStock(sym){
+  // 1) Alpaca's asset list confirms the ticker and gives its name and exchange
+  if(useProxy()){
+    const r=await fetch("/api/asset?symbol="+encodeURIComponent(sym)); let j={}; try{ j=await r.json(); }catch(e){}
+    if(r.status===404||r.status===400) throw new Error(j.message||`No US stock or ETF found for ${sym}.`);
+    if(r.ok){
+      if(j.assetClass && j.assetClass!=="us_equity") throw new Error(`${sym} isn't a US stock or ETF.`);
+      if(j.status && j.status!=="active") throw new Error(`${sym} is no longer actively traded.`);
+      return {name:cleanName(j.name,sym), otc:j.exchange==="OTC"};
+    }
+  } else if(ownAlp()){
+    try{ const r=await fetch("https://paper-api.alpaca.markets/v2/assets/"+encodeURIComponent(sym),{headers:{"APCA-API-KEY-ID":alpId,"APCA-API-SECRET-KEY":alpSec}});
+      if(r.status===404) throw Object.assign(new Error(`No US stock or ETF found for ${sym}.`),{final:true});
+      if(r.ok){ const j=await r.json();
+        if(j.class!=="us_equity") throw Object.assign(new Error(`${sym} isn't a US stock or ETF.`),{final:true});
+        return {name:cleanName(j.name,sym), otc:j.exchange==="OTC"}; }
+    }catch(e){ if(e.final) throw e; }
+  }
+  // 2) Fallback: accept it if the price feed knows the symbol
+  if(hasAlp()){
+    try{ const j=await alpGet("/v2/stocks/snapshots",{symbols:sym,feed:"iex"}); if((j.snapshots||j)[sym]) return {name:sym,otc:false}; }catch(e){}
+    throw new Error(`Couldn't find ${sym}. Check the symbol and try again.`);
+  }
+  return {name:sym, otc:false, unchecked:true}; // no data connection yet: add it, prices fill in once keys are connected
+}
+function addMsg(text,kind){ const m=$("addMsg"); m.textContent=text; m.className="addmsg"+(kind?" "+kind:""); }
+function showCard(sym){
+  const s=S.get(sym); if(!s) return;
+  if($("q").value){ $("q").value=""; }
+  if(group!=="All" && s.group!==group){ group="All"; store.set("mw.group",group); renderChips(); }
+  layout();
+  const e=cardEls[sym]; if(!e) return;
+  e.el.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"center"});
+  e.el.classList.add("f-up"); setTimeout(()=>e.el.classList.remove("f-up"),900);
+}
+$("addForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const sym=$("addSym").value.trim().toUpperCase().replace(/^\$/,"");
+  if(!sym){ addMsg("Type a ticker symbol, like TSLA.","err"); return; }
+  if(!TICKER.test(sym)){ addMsg("Use a ticker symbol, like TSLA or BRK.B.","err"); return; }
+  if(S.has(sym)){ addMsg(`${sym} is already on the board.`,"err"); showCard(sym); return; }
+  if(custom.length>=MAX_CUSTOM){ addMsg(`You can add up to ${MAX_CUSTOM} stocks. Remove one first.`,"err"); return; }
+  $("addBtn").disabled=true; addMsg(`Looking up ${sym}…`);
+  try{
+    const info=await lookupStock(sym);
+    if(S.has(sym)) return;
+    custom.push({sym,name:info.name,otc:info.otc}); saveCustom();
+    mk(sym,info.name,MY,null,null,"stock"); STOCKS.push(sym); wallSyms.push(sym); makeCard(sym);
+    if(info.otc){ OTC.add(sym); pollOTC(); } else if(hasAlp()) pollSnapshots();
+    renderChips(); showCard(sym); $("addSym").value="";
+    addMsg(info.unchecked ? `Added ${sym}. Prices appear once keys are connected.` : `Added ${info.name} (${sym}).`,"ok");
+  }catch(err){ addMsg(err.message||"Couldn't add that stock. Try again.","err"); }
+  finally{ $("addBtn").disabled=false; }
+});
+function removeStock(sym){
+  if(cur.sym===sym) closeSheet();
+  custom=custom.filter(c=>c.sym!==sym); saveCustom();
+  S.delete(sym); OTC.delete(sym);
+  [STOCKS,wallSyms].forEach(a=>{ const i=a.indexOf(sym); if(i>=0) a.splice(i,1); });
+  cardEls[sym]?.el.remove(); delete cardEls[sym];
+  renderChips(); layout(); addMsg(`Removed ${sym}.`);
 }
 
 // ---------- History (detail sheet) ----------
@@ -641,8 +744,6 @@ window.addEventListener("resize",()=>{ if(cur.pts&&!$("sheet").hidden) drawChart
 setInterval(()=>{ if(cur.sym&&cur.rk==="1D"&&cur.src){ const hit=HCACHE.get(cur.sym+"|1D"); if(hit) render(hit.data,RANGES[0]); } },5000);
 
 // open the sheet from cards and benchmark tiles
-Object.entries(cardEls).forEach(([sym,e])=>{ e.el.tabIndex=0; e.el.setAttribute("role","button"); e.el.setAttribute("aria-label",sym+" price history");
-  e.el.addEventListener("click",()=>openSheet(sym)); e.el.addEventListener("keydown",ev=>{ if(ev.key==="Enter"||ev.key===" "){ev.preventDefault();openSheet(sym);} }); });
 BENCH.forEach(b=>{ const el=$("b-"+b.sym); el.tabIndex=0; el.setAttribute("role","button");
   el.addEventListener("click",()=>openSheet(b.sym)); el.addEventListener("keydown",ev=>{ if(ev.key==="Enter"||ev.key===" "){ev.preventDefault();openSheet(b.sym);} }); });
 
