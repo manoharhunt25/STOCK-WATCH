@@ -2,7 +2,7 @@
 
 A live market dashboard for a personal watchlist: 37 tech, AI, semiconductor, storage, quantum and space stocks, plus Bitcoin, Ethereum, Solana, XRP, and the Nasdaq-100, Dow Jones and S&P 500.
 
-**Live demo:** https://incredible-bubblegum-fe7cd6.netlify.app
+**Live demo:** https://stockwatch-m7.netlify.app
 
 Anyone with the link sees live prices and full price history without needing their own API keys. The keys live on the server, never in the browser.
 
