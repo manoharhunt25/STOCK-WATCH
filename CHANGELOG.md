@@ -3,6 +3,18 @@
 All notable changes to STOCK Watch are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-11-23
+
+### Added
+- **Cloudflare Workers hosting.** `wrangler.jsonc` and `src/worker.js` deploy the app on Cloudflare's free plan: static files from `public/`, the API on `/api/*`, with short-lived responses shared between visitors through the edge cache.
+
+### Changed
+- API logic moved into `src/api.js`, shared by Cloudflare and Netlify; `netlify/functions/api.mts` is now a thin wrapper.
+- Refresh rates now adapt to save requests: stocks every 5 s while the page is in view during market hours (was 3 s), 15 s before and after hours, 30 s in a background tab and 5 min when the market is closed. Crypto every 5 s, 30 s in the background.
+- Crypto prices are fetched straight from Alpaca's public feed, falling back to `/api/crypto` only if the browser can't reach it.
+- The page refreshes immediately when a tab comes back into view.
+- The API rejects anything other than GET and HEAD.
+
 ## [1.5.0] - 2026-11-23
 
 ### Added
@@ -40,6 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Netlify Function proxy that keeps API keys on the server so anyone with the link gets live data.
 - Light and dark themes and a phone layout.
 
+[1.6.0]: https://github.com/manoharhunt25/STOCK-WATCH/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/manoharhunt25/STOCK-WATCH/compare/v1.1.0...v1.5.0
 [1.1.0]: https://github.com/manoharhunt25/STOCK-WATCH/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/manoharhunt25/STOCK-WATCH/releases/tag/v1.0.0
