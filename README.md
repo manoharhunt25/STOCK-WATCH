@@ -1,62 +1,79 @@
 # STOCK Watch
 
-A live market dashboard for a personal watchlist: 37 tech, AI, semiconductor, storage, quantum and space stocks, plus Bitcoin, Ethereum, Solana, XRP, and the Nasdaq-100, Dow Jones and S&P 500.
+[![Version](https://img.shields.io/badge/version-1.5.0-2f6fd6)](CHANGELOG.md)
+[![Netlify](https://img.shields.io/badge/hosted%20on-Netlify-00c7b7)](https://stockwatch-m7.netlify.app)
 
-**Live demo:** https://stockwatch-m7.netlify.app
+A live market board you build yourself. Add the stocks, ETFs and crypto you care about, group them into your own categories, arrange them by dragging, and set price alerts in both directions.
 
-Anyone with the link sees live prices and full price history without needing their own API keys. The keys live on the server, never in the browser.
+**Live site:** https://stockwatch-m7.netlify.app
+
+Every visitor starts with an empty board. Boards, categories and alerts are saved in each visitor's own browser, so you can share the link and everyone gets their own. Nobody needs an API key: the data keys live on the server.
 
 ---
 
 ## Features
 
-- **Live prices.** Stocks refresh every 3 seconds during market hours, crypto around the clock.
-- **Benchmarks.** Nasdaq-100, Dow Jones and S&P 500 (tracked through QQQ, DIA and VOO), plus BTC and ETH.
-- **Market breadth.** A bar showing how many names are up, down or flat.
-- **Add your own stocks.** Type any US stock or ETF ticker into **Add stock**. The site checks that it exists, fills in the company name, and adds a live card under **My stocks**. Each viewer's additions are saved in their own browser (up to 25), so friends can build their own boards without changing yours. Remove a card with its **×**.
-- **Grouping and sorting.** Filter by theme (Semis, AI & Cloud, Storage, Quantum, Big Tech, Space, Crypto, Funds & Metals), search by symbol or name, and sort by biggest losers, gainers, price or A–Z.
-- **Price history.** Click any card for an interactive chart with **1D, 5D, 1M, 6M, YTD, 5Y and Lifetime** ranges, a hover tooltip, and range stats (start, high, low, last, distance from high).
-- **Tick flashes.** Cards flash green or red when the price moves.
-- **Market status.** Shows open, pre-market, after-hours or closed, with an Eastern Time clock.
-- **Light and dark themes.** Follows the viewer's system setting.
+- **Your own board.** Add any US stock or ETF, or any crypto Alpaca supports, by ticker. Each symbol is checked before it's added, and the company or coin name is filled in. Quick-add buttons and a sample watchlist help you get started. Remove a card with its **×**, and use **Undo** if you change your mind.
+- **Custom categories.** Create, rename and delete categories (for example "Long term", "Earnings this week", "Crypto"). The board shows a section per category, with filter chips to focus on one.
+- **Drag to arrange.** Drag cards to reorder them or move them between categories, on desktop or touch. Each card's detail view also has a category picker and **Move earlier / Move later** buttons.
+- **Two-way price alerts.** For any symbol, set a *falls to* price below the current price, a *rises to* price above it, or both. When the price crosses a level you get an on-page alert, a browser notification and a short sound. Alert levels are drawn on the chart, and the **Alerts** panel lists every alert with its status. Triggered alerts turn off and can be turned back on.
+- **Live prices.** Stocks refresh every 3 seconds, crypto every 4 seconds, OTC stocks every 2 minutes during market hours.
+- **Price history.** Open any card for an interactive chart with **1D, 5D, 1M, 6M, YTD, 5Y and Lifetime** ranges, a hover tooltip, and range stats.
+- **Market strip.** Nasdaq-100, Dow Jones and S&P 500, tracked through QQQ, DIA and VOO.
+- **Sorting and search.** Keep your own order, or sort by biggest losers, biggest gainers, price or symbol, and filter by name.
+- **Light and dark themes**, following the visitor's system setting, and a layout that works on phones.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    B[Visitor's browser<br/>public/index.html] -->|/api/snapshots<br/>/api/bars<br/>/api/crypto<br/>/api/asset<br/>/api/td, /api/quote| F[Netlify Function<br/>netlify/functions/api.mts]
-    F -->|keys from env vars| A[Alpaca Market Data<br/>stocks + crypto]
-    F -->|key from env var| T[Twelve Data<br/>long history + OTC]
-    B -.->|24h baseline| C[CoinGecko]
+    B[Visitor's browser<br/>public/index.html<br/>board saved in localStorage] -->|/api/snapshots, /api/bars<br/>/api/crypto, /api/asset<br/>/api/quote, /api/td| F[Netlify Function<br/>netlify/functions/api.mts]
+    F -->|keys from env vars| A[Alpaca Market Data<br/>stocks, crypto, symbol lookup]
+    F -->|key from env var| T[Twelve Data<br/>OTC quotes, pre-2016 history]
 ```
 
-- **`public/index.html`** is the whole dashboard: HTML, CSS and JavaScript in one file, with no framework or build step.
-- **`netlify/functions/api.mts`** is a small serverless proxy. It reads the API keys from Netlify environment variables, only answers for the dashboard's own symbols, and sets CDN cache headers so many viewers share one upstream request. This keeps usage inside free-tier limits.
-- When the page finds the proxy (`/api/health`), it hides the key fields and runs in **demo mode**. Opened as a local file, it falls back to keys entered in the page or in its `CONFIG` block.
+- **`public/index.html`** is the whole app: HTML, CSS and JavaScript in one file, with no build step. The only external script is [SortableJS](https://github.com/SortableJS/Sortable) (from cdnjs) for drag and drop.
+- **`netlify/functions/api.mts`** is a small serverless proxy. It reads the API keys from Netlify environment variables, accepts only well-formed symbols on fixed routes, and sets CDN cache headers so many visitors share one upstream request.
+- When the page finds the proxy (`/api/health`), it hides the key fields. Opened as a local file, it uses keys entered on the page or in its `CONFIG` block.
+
+### What's stored in the browser
+
+Everything a visitor sets up is kept in `localStorage` under `sw.board.v2`:
+
+```js
+{
+  items:  [{ key: "AAPL", sym: "AAPL", kind: "stock", name: "Apple Inc.", otc: false, cat: "k3x9a1" },
+           { key: "BTC/USD", sym: "BTC", kind: "crypto", name: "Bitcoin", otc: false, cat: null }],
+  cats:   [{ id: "k3x9a1", name: "Big Tech" }],
+  alerts: [{ id: "…", key: "AAPL", dir: "below", price: 180, created: 1763900000000, fired: null }]
+}
+```
+
+Array order is display order. Stocks added with v1.1's "Add stock" (`sw.custom`) are migrated automatically on first load.
 
 ### Data sources
 
 | Data | Source | Notes |
 |---|---|---|
 | Live stock prices | Alpaca (IEX feed) | Free plan; real-time trades from the IEX exchange |
-| Stock history | Alpaca (consolidated feed) | Free plan allows data older than 15 minutes; goes back to 2016 |
-| Crypto prices and history | Alpaca crypto | Public data |
-| Crypto 24h change | CoinGecko | Public data, best effort |
-| Lifetime history before 2016 | Twelve Data | Free plan: 8 requests/min, 800/day |
-| OTC stocks (HGRAF, or any you add) | Twelve Data quote | Every 2 min in market hours, every 30 min otherwise |
-| Ticker lookup for **Add stock** | Alpaca assets API | Confirms the symbol and returns the company name |
+| Stock history | Alpaca (consolidated feed) | Free plan allows data older than 15 minutes; back to 2016 |
+| Crypto prices and history | Alpaca crypto | Any X/USD pair Alpaca lists |
+| Symbol lookup | Alpaca assets API | Confirms a ticker and returns its name and exchange |
+| OTC stock quotes | Twelve Data | Free plan: 8 requests/min, 800/day |
+| Lifetime history before 2016 | Twelve Data | Same limits |
 
 ## Project structure
 
 ```
 STOCK-WATCH/
 ├── public/
-│   └── index.html            # the dashboard
+│   └── index.html            # the app
 ├── netlify/
 │   └── functions/
 │       └── api.mts           # key-hiding API proxy
-├── netlify.toml              # publish folder + functions folder
-├── package.json
+├── netlify.toml              # publish and functions folders
+├── package.json              # version and dev types
+├── CHANGELOG.md              # release notes
 └── README.md
 ```
 
@@ -65,11 +82,11 @@ STOCK-WATCH/
 ### 1. Get free API keys
 
 - **Alpaca:** sign up at [alpaca.markets](https://app.alpaca.markets/signup) (no funding needed). In the **Paper** account, open **API Keys**, click **Generate**, and copy the Key ID and Secret. The Secret is shown only once.
-- **Twelve Data:** sign up at [twelvedata.com](https://twelvedata.com/register) and copy your API key.
+- **Twelve Data** (optional, for OTC stocks and pre-2016 history): sign up at [twelvedata.com](https://twelvedata.com/register) and copy your API key.
 
 ### 2. Add the keys to Netlify
 
-In your Netlify project, go to **Project configuration → Environment variables → Add a variable**, and create these three with **Contains secret values** ticked:
+In your Netlify project, go to **Project configuration → Environment variables → Add a variable**, and create these with **Contains secret values** ticked:
 
 | Key | Value |
 |---|---|
@@ -79,41 +96,47 @@ In your Netlify project, go to **Project configuration → Environment variables
 
 ### 3. Deploy
 
-You need [Node.js](https://nodejs.org) (LTS) installed.
+You need [Node.js](https://nodejs.org) (LTS).
 
 ```bash
 npx netlify-cli login
 npx netlify-cli deploy --prod --build --site <your-site-id>
 ```
 
-Netlify reads environment variables at deploy time, so redeploy after changing any key.
-
-Check the setup at `https://<your-site>.netlify.app/api/health`. It should return:
-
-```json
-{"alpaca":true,"td":true}
-```
+Netlify reads environment variables at deploy time, so redeploy after changing a key. Check the setup at `https://<your-site>.netlify.app/api/health`, which should return `{"alpaca":true,"td":true}`.
 
 ### Run locally without Netlify
 
-Open `public/index.html` in a browser, then paste your keys into the fields at the top and click **Connect**. Keys entered this way are stored only in that browser.
+Open `public/index.html` in a browser, paste your keys into the fields at the top, and click **Connect**. Keys entered this way stay in that browser.
 
-## Customizing the watchlist
+## Price alerts: how they behave
 
-- **Per viewer:** use **Add stock** on the page. Added symbols are stored in that browser's local storage under `sw.custom`.
-- **Default board for everyone:** edit the `SNAP` array near the top of the script in `public/index.html` (symbol, name, fallback price, fallback % change, group), and add the symbol to the `STOCKS` set in `netlify/functions/api.mts`.
+- An alert checks each live price update. A *falls to* alert fires when the price is at or below the level; a *rises to* alert fires at or above it.
+- When creating an alert, the falls-to price must be below the current price and the rises-to price above it, so an alert can't fire the instant it's set.
+- Alerts are one-shot: after firing they switch off. Use **Turn back on** in the alert list to re-arm one.
+- Browser notifications are requested the first time you set an alert. If they're blocked, alerts still appear on the page.
+- Alerts run while STOCK Watch is open in a browser tab (it can be in the background). They don't reach you when the page is closed.
+
+## Versioning and contributing
+
+- Releases follow [Semantic Versioning](https://semver.org) and are tagged `vMAJOR.MINOR.PATCH`. See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
+- Work happens on short-lived branches (`feature/…`, `fix/…`) merged into `main`; `main` is always what's deployed.
+- Commit messages follow [Conventional Commits](https://www.conventionalcommits.org) (`feat:`, `fix:`, `docs:`, `chore:`).
+- When releasing, update the version in `package.json` and `VERSION` in `public/index.html`, add a CHANGELOG entry, and tag the merge commit.
 
 ## Security
 
-- API keys are stored only as Netlify environment variables and are used by the server function. They never reach the browser and are not in this repository.
-- The proxy only accepts well-formed ticker symbols (at most 80 per request) and fixed endpoints, so it can't be used as a general relay to the data APIs. Responses are cached at Netlify's edge to keep usage within the free tiers.
+- API keys are stored only as Netlify environment variables and used by the server function. They never reach the browser and are not in this repository.
+- The proxy accepts only well-formed symbols (at most 80 stocks or 40 crypto pairs per request) on fixed routes, so it can't be used as a general relay. Responses are cached at Netlify's edge to stay within the free tiers.
+- Visitors' boards and alerts never leave their browser.
 - If a key is ever exposed, regenerate it at the provider, update it in Netlify, and redeploy.
 
 ## Known limitations
 
-- Free live data comes from one exchange (IEX), so prices can differ by a few cents from the full market price.
-- Alpaca history begins in 2016 (2021 for crypto). Twelve Data fills in older Lifetime data.
-- Nasdaq and the Dow are shown through ETFs, not the index values themselves.
+- Alerts need the page to be open. Alerts that reach your phone with the page closed would need accounts and a server-side scheduler.
+- Boards are per browser and don't sync between devices.
+- Free live stock data comes from one exchange (IEX), so prices can differ by a few cents from the full market price.
+- Alpaca history begins in 2016 (2021 for crypto); Twelve Data fills in older Lifetime data.
 - Prices outside regular trading hours reflect the last trade.
 
 ## Disclaimer
