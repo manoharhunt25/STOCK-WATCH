@@ -1,0 +1,16 @@
+// Cloudflare Workers configuration for STOCK Watch.
+// The name must match the Worker in the Cloudflare dashboard.
+// Add ALPACA_KEY_ID, ALPACA_SECRET and TWELVEDATA_KEY as secrets under
+// Settings > Variables and Secrets (never put them in this file).
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "stock-watch",
+  "main": "./src/worker.js",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./public/",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": { "enabled": true }
+}

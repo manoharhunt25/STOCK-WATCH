@@ -356,14 +356,14 @@ footer{margin-top:28px;font-size:11px;color:var(--muted);max-width:75ch;display:
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
 <footer>
-  <span>Stocks and ETFs: Alpaca (IEX real-time trades, refreshed every 3 s; consolidated history back to 2016). Crypto: Alpaca, every 4 s. OTC stocks and pre-2016 history: Twelve Data. Market strip tracks the Nasdaq-100, Dow and S&amp;P 500 through QQQ, DIA and VOO. Prices outside regular hours reflect the last trade.</span>
+  <span>Stocks and ETFs: Alpaca (IEX real-time trades; consolidated history back to 2016), refreshed every 5 s while this page is in view during market hours, every 30 s in a background tab and every 5 min when the market is closed. Crypto: Alpaca, every 5 s (30 s in the background). OTC stocks and pre-2016 history: Twelve Data. Market strip tracks the Nasdaq-100, Dow and S&amp;P 500 through QQQ, DIA and VOO. Prices outside regular hours reflect the last trade.</span>
   <span>Your board, categories and alerts are stored in this browser only. Not investment advice. <span id="verFoot"></span></span>
 </footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
 <script>
 "use strict";
-const VERSION = "1.5.0";
+const VERSION = "1.6.0";
 // ===== YOUR KEYS (only for opening this file locally) ================
 // The hosted site uses keys stored on Netlify. To run this file from your
 // computer instead, paste keys here or into the fields at the top of the page.
@@ -698,17 +698,29 @@ async function pollSnapshots(){
     const map=j.snapshots||j;
     keys.forEach(k=>{ const d=map[k], s=S.get(k); if(d&&s) applySnapshot(s,d); });
     snapFails=0; feed("ok", useProxy()?"Live":"Live · own keys");
-    snapTimer=setTimeout(pollSnapshots,3000);
+    snapTimer=setTimeout(pollSnapshots,stockDelay());
   }catch(err){
     if(err.auth){ feed("bad","Key rejected"); return; }
     snapFails++; feed("wait", err.rate?"Rate limited":"Reconnecting");
     snapTimer=setTimeout(pollSnapshots, err.rate?15000:Math.min(30000,2000*snapFails));
   }
 }
+// Refresh rates, tuned to keep server requests low: fast while the page is in
+// view during trading, slower in a background tab, slowest when the market is closed.
+function stockDelay(){ const s=localSession(); if(s==="closed") return 300000; if(document.hidden) return 30000; return s==="regular"?5000:15000; }
+function cryptoDelay(){ return document.hidden?30000:5000; }
+// Crypto comes straight from Alpaca's public feed (no server request); the
+// site's /api/crypto is the fallback if the browser can't reach it directly.
+let directCrypto=true;
 async function fetchCryptoSnapshots(pairs){
   const q=encodeURIComponent(pairs.join(","));
-  const urls=[]; if(onHttp) urls.push("/api/crypto?symbols="+q); urls.push(ALP+"/v1beta3/crypto/us/snapshots?symbols="+q);
-  for(const url of urls){ try{ const r=await fetch(url); if(!r.ok) continue; const j=await r.json(); if(j.snapshots) return j.snapshots; }catch(e){} }
+  const direct=ALP+"/v1beta3/crypto/us/snapshots?symbols="+q, urls=[];
+  if(directCrypto||!onHttp) urls.push(direct);
+  if(onHttp) urls.push("/api/crypto?symbols="+q);
+  for(const url of urls){
+    try{ const r=await fetch(url); if(r.ok){ const j=await r.json(); if(j.snapshots) return j.snapshots; } }catch(e){}
+    if(url===direct && onHttp) directCrypto=false;
+  }
   return null;
 }
 async function pollCrypto(){
@@ -721,7 +733,9 @@ async function pollCrypto(){
     if(d.dailyBar){ s.high=Math.max(d.dailyBar.h,px); s.low=Math.min(d.dailyBar.l,px); }
     pushTick(s,px); });
 }
-pollCrypto(); setInterval(pollCrypto,4000);
+let cryptoTimer=null;
+async function cryptoLoop(){ clearTimeout(cryptoTimer); await pollCrypto(); cryptoTimer=setTimeout(cryptoLoop,cryptoDelay()); }
+cryptoLoop();
 // OTC stocks via Twelve Data quotes: every 2 min in market hours, every 30 min otherwise (free tier: 800 calls/day)
 async function pollOTC(){
   const viaProxy=PROXY.td; if(!tdKey && !viaProxy) return;
@@ -947,7 +961,9 @@ function checkAlerts(s){
   }
   if(hit){ saveBoard(); renderAlerts(); }
 }
-document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ unseen=0; document.title="STOCK Watch"; } });
+document.addEventListener("visibilitychange",()=>{ if(document.hidden) return; unseen=0; document.title="STOCK Watch";
+  // back in view: refresh now instead of waiting out the slower background interval
+  if(hasAlp()) pollSnapshots(); cryptoLoop(); });
 $("alertsBtn").addEventListener("click",()=>{ renderAlerts(); openModal($("alertsDlg")); });
 
 // ---------- Modals ----------
