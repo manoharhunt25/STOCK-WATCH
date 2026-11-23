@@ -1,14 +1,22 @@
 import type { Config, Context } from "@netlify/functions"
 
-// Proxy for the STOCK Watch dashboard: keeps API keys on the server.
-// Answers for the built-in watchlist plus any valid US ticker a viewer adds.
-const STOCKS = new Set(["AAPL", "AMD", "AMZN", "ASML", "AVGO", "BLK", "CBRS", "COHR", "COPX", "CRWV", "DIA", "ECVT", "GLD", "HGRAF", "INDO", "INTC", "IREN", "LITE", "MRVL", "MSTR", "MU", "NBIS", "NVDA", "PLTR", "QBTS", "QQQ", "QUBT", "RACE", "SLV", "SNDK", "SOUN", "SPCE", "SPCX", "STX", "TSM", "VOO", "VSXY", "WDC", "XNDU"])
-const CRYPTO = new Set(["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD"])
+// API proxy for STOCK Watch. Keeps the data-provider keys on the server and
+// only accepts well-formed symbols on a fixed set of routes.
+//
+//   GET /api/health                     which providers are configured
+//   GET /api/snapshots?symbols=A,B      live stock snapshots (Alpaca, IEX feed)
+//   GET /api/bars?symbol=A&timeframe=…  stock history (Alpaca, consolidated feed)
+//   GET /api/crypto?symbols=BTC/USD,…   live crypto snapshots (Alpaca)
+//   GET /api/asset?symbol=A|BTC/USD     confirm a symbol exists, get its name
+//   GET /api/quote?symbol=A             latest quote for OTC stocks (Twelve Data)
+//   GET /api/td?symbol=A&interval=…     long-range history (Twelve Data)
+
 const ALP = "https://data.alpaca.markets"
 const TRADING = "https://paper-api.alpaca.markets" // asset lookups work with paper-account keys
 const TICKER = /^[A-Z][A-Z0-9.]{0,9}$/
-const okStock = (s: string) => STOCKS.has(s) || TICKER.test(s)
-const MAX_SYMBOLS = 80
+const PAIR = /^[A-Z0-9]{1,10}\/USD$/
+const MAX_STOCKS = 80
+const MAX_PAIRS = 40
 
 function cached(seconds: number): Record<string, string> {
   return {
@@ -29,30 +37,34 @@ function copy(from: URLSearchParams, keys: string[]): URLSearchParams {
   for (const k of keys) { const v = from.get(k); if (v) out.set(k, v.slice(0, 64)) }
   return out
 }
+function list(raw: string | null, test: RegExp, max: number): string[] {
+  return [...new Set((raw ?? "").toUpperCase().split(",").filter((s) => test.test(s)))].slice(0, max)
+}
 
 export default async (req: Request, context: Context) => {
   const q = new URL(req.url).searchParams
   const keyId = Netlify.env.get("ALPACA_KEY_ID")
   const secret = Netlify.env.get("ALPACA_SECRET")
   const tdKey = Netlify.env.get("TWELVEDATA_KEY")
+  const hasAlpaca = !!(keyId && secret)
   const alpHeaders = { "APCA-API-KEY-ID": keyId ?? "", "APCA-API-SECRET-KEY": secret ?? "" }
 
   switch (context.params.route) {
     case "health":
-      return Response.json({ alpaca: !!(keyId && secret), td: !!tdKey }, { headers: noStore })
+      return Response.json({ alpaca: hasAlpaca, td: !!tdKey }, { headers: noStore })
 
     case "snapshots": {
-      if (!keyId || !secret) return fail("Live prices aren't set up on this site yet.", 503)
-      const symbols = [...new Set((q.get("symbols") ?? "").split(",").filter(okStock))].slice(0, MAX_SYMBOLS)
-      if (!symbols.length) return fail("No supported symbols requested.", 400)
+      if (!hasAlpaca) return fail("Live prices aren't set up on this site yet.", 503)
+      const symbols = list(q.get("symbols"), TICKER, MAX_STOCKS)
+      if (!symbols.length) return fail("No valid symbols requested.", 400)
       const res = await fetch(`${ALP}/v2/stocks/snapshots?` + new URLSearchParams({ symbols: symbols.join(","), feed: "iex" }), { headers: alpHeaders })
       return relay(res, 3)
     }
 
     case "bars": {
-      if (!keyId || !secret) return fail("Price history isn't set up on this site yet.", 503)
+      if (!hasAlpaca) return fail("Price history isn't set up on this site yet.", 503)
       const symbol = q.get("symbol") ?? ""
-      if (!okStock(symbol)) return fail("Unsupported symbol.", 400)
+      if (!TICKER.test(symbol)) return fail("Unsupported symbol.", 400)
       const p = copy(q, ["timeframe", "start", "end", "limit", "sort", "page_token", "adjustment"])
       p.set("feed", "sip")
       const tf = p.get("timeframe") ?? ""
@@ -61,14 +73,23 @@ export default async (req: Request, context: Context) => {
       return relay(res, seconds)
     }
 
+    case "crypto": {
+      const pairs = list(q.get("symbols"), PAIR, MAX_PAIRS)
+      if (!pairs.length) return fail("No valid crypto pairs requested.", 400)
+      const res = await fetch(`${ALP}/v1beta3/crypto/us/snapshots?` + new URLSearchParams({ symbols: pairs.join(",") }), {
+        headers: hasAlpaca ? alpHeaders : undefined,
+      })
+      return relay(res, 3)
+    }
+
     case "asset": {
-      // Confirms a ticker exists and returns its name and exchange, for "Add stock"
-      if (!keyId || !secret) return fail("Stock lookup isn't set up on this site yet.", 503)
+      if (!hasAlpaca) return fail("Symbol lookup isn't set up on this site yet.", 503)
       const symbol = (q.get("symbol") ?? "").toUpperCase()
-      if (!TICKER.test(symbol)) return fail("That doesn't look like a ticker symbol.", 400)
+      const isPair = PAIR.test(symbol)
+      if (!isPair && !TICKER.test(symbol)) return fail("That doesn't look like a ticker symbol.", 400)
       const res = await fetch(`${TRADING}/v2/assets/${encodeURIComponent(symbol)}`, { headers: alpHeaders })
-      if (res.status === 404) return fail(`No US stock or ETF found for ${symbol}.`, 404)
-      if (!res.ok) return fail("Stock lookup failed. Try again in a moment.", 502)
+      if (res.status === 404) return fail(isPair ? `No crypto found for ${symbol.split("/")[0]}.` : `No US stock or ETF found for ${symbol}.`, 404)
+      if (!res.ok) return fail("Symbol lookup failed. Try again in a moment.", 502)
       const a = await res.json()
       return Response.json(
         { symbol: a.symbol, name: a.name, exchange: a.exchange, assetClass: a.class, status: a.status },
@@ -76,17 +97,10 @@ export default async (req: Request, context: Context) => {
       )
     }
 
-    case "crypto": {
-      const pairs = [...CRYPTO].join(",")
-      const headers = keyId && secret ? alpHeaders : undefined
-      const res = await fetch(`${ALP}/v1beta3/crypto/us/snapshots?` + new URLSearchParams({ symbols: pairs }), { headers })
-      return relay(res, 3)
-    }
-
     case "quote": {
       if (!tdKey) return fail("OTC quotes aren't set up on this site yet.", 503)
       const symbol = q.get("symbol") ?? ""
-      if (!okStock(symbol)) return fail("Unsupported symbol.", 400)
+      if (!TICKER.test(symbol)) return fail("Unsupported symbol.", 400)
       const res = await fetch("https://api.twelvedata.com/quote?" + new URLSearchParams({ symbol, apikey: tdKey }))
       return relay(res, 120)
     }
@@ -94,7 +108,7 @@ export default async (req: Request, context: Context) => {
     case "td": {
       if (!tdKey) return fail("Long-range history isn't set up on this site yet.", 503)
       const symbol = q.get("symbol") ?? ""
-      if (!okStock(symbol) && !CRYPTO.has(symbol)) return fail("Unsupported symbol.", 400)
+      if (!TICKER.test(symbol) && !PAIR.test(symbol)) return fail("Unsupported symbol.", 400)
       const p = copy(q, ["symbol", "interval", "outputsize", "start_date", "order"])
       p.set("apikey", tdKey)
       const iv = p.get("interval") ?? ""
