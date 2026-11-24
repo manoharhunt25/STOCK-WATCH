@@ -3,6 +3,13 @@
 All notable changes to STOCK Watch are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] - 2026-11-23
+
+### Added
+- **Import list.** Paste tickers from anywhere to add them in one go. Lines that aren't tickers (company names, prices) are ignored; coin tickers such as BTC, ETH and SOL, or anything written as BTC-USD, are added as crypto; familiar symbols are sorted into categories; symbols already on the board are skipped and unknown ones are listed.
+- The sample watchlist can be loaded from the Import dialog even when the board isn't empty (it only adds what's missing).
+- Adding a coin ticker in Stock mode (for example BTC, which is a Grayscale Bitcoin fund on the stock market) now suggests switching to Crypto.
+
 ## [1.6.0] - 2026-11-23
 
 ### Added
@@ -52,6 +59,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Netlify Function proxy that keeps API keys on the server so anyone with the link gets live data.
 - Light and dark themes and a phone layout.
 
+[1.7.0]: https://github.com/manoharhunt25/STOCK-WATCH/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/manoharhunt25/STOCK-WATCH/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/manoharhunt25/STOCK-WATCH/compare/v1.1.0...v1.5.0
 [1.1.0]: https://github.com/manoharhunt25/STOCK-WATCH/compare/v1.0.0...v1.1.0

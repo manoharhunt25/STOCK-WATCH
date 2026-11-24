@@ -1,6 +1,6 @@
 # STOCK Watch
 
-[![Version](https://img.shields.io/badge/version-1.6.0-2f6fd6)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.7.0-2f6fd6)](CHANGELOG.md)
 [![Cloudflare Workers](https://img.shields.io/badge/hosted%20on-Cloudflare%20Workers-f38020)](https://developers.cloudflare.com/workers/)
 
 A live market board you build yourself. Add the stocks, ETFs and crypto you care about, group them into your own categories, arrange them by dragging, and set price alerts in both directions.
@@ -14,6 +14,7 @@ Every visitor starts with an empty board. Boards, categories and alerts are save
 ## Features
 
 - **Your own board.** Add any US stock or ETF, or any crypto Alpaca supports, by ticker. Each symbol is checked before it's added, and the company or coin name is filled in. Quick-add buttons and a sample watchlist help you get started. Remove a card with its **×**, and use **Undo** if you change your mind.
+- **Import a list.** Paste tickers from anywhere (a spreadsheet, a broker's watchlist, a note) into **Import list**. Company names, prices and other text are ignored, coin tickers like BTC are added as crypto, familiar symbols are sorted into categories, and anything not found is reported. The sample watchlist can also be loaded from here at any time.
 - **Custom categories.** Create, rename and delete categories (for example "Long term", "Earnings this week", "Crypto"). The board shows a section per category, with filter chips to focus on one.
 - **Drag to arrange.** Drag cards to reorder them or move them between categories, on desktop or touch. Each card's detail view also has a category picker and **Move earlier / Move later** buttons.
 - **Two-way price alerts.** For any symbol, set a *falls to* price below the current price, a *rises to* price above it, or both. When the price crosses a level you get an on-page alert, a browser notification and a short sound. Alert levels are drawn on the chart, and the **Alerts** panel lists every alert with its status. Triggered alerts turn off and can be turned back on.
