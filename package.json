@@ -1,6 +1,6 @@
 {
   "name": "stock-watch",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Build your own live board of stocks and crypto, with price alerts and custom categories.",
   "private": true,
   "type": "module",
