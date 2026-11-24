@@ -7,6 +7,8 @@
   "name": "stock-watch",
   "main": "./src/worker.js",
   "compatibility_date": "2026-11-01",
+  // Keep variables set in the dashboard when deploying from Git (secrets are always kept)
+  "keep_vars": true,
   "assets": {
     "directory": "./public/",
     "binding": "ASSETS",
