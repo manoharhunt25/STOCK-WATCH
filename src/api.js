@@ -59,9 +59,10 @@ function list(raw, test, max) {
 export async function handleApi(request, env, route) {
   if (request.method !== "GET" && request.method !== "HEAD") return fail("Method not allowed.", 405);
   const q = new URL(request.url).searchParams;
-  const keyId = env.ALPACA_KEY_ID;
-  const secret = env.ALPACA_SECRET;
-  const tdKey = env.TWELVEDATA_KEY;
+  // Trim so a stray space or line break pasted into a secret doesn't break auth
+  const keyId = env.ALPACA_KEY_ID?.trim();
+  const secret = env.ALPACA_SECRET?.trim();
+  const tdKey = env.TWELVEDATA_KEY?.trim();
   const hasAlpaca = !!(keyId && secret);
   const alpHeaders = { "APCA-API-KEY-ID": keyId ?? "", "APCA-API-SECRET-KEY": secret ?? "" };
 
