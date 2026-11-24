@@ -193,6 +193,9 @@ h1{font:700 26px/1 var(--display);letter-spacing:.02em;margin:0;text-transform:u
 .alist .state.fired{color:var(--warn)}
 .alist .sym-link{border:0;background:none;padding:0;font:700 14px var(--display);letter-spacing:.03em;cursor:pointer;color:var(--fg)}
 .alist .acts{display:flex;gap:6px}
+textarea.field{width:100%;font:13px/1.5 var(--mono);resize:vertical;min-height:150px}
+.check{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--muted)}
+.check input{margin-top:3px}
 .cat-list{display:grid;gap:8px}
 .cat-row{display:flex;gap:8px;align-items:center}
 .cat-row .field{flex:1;min-width:0}
@@ -264,6 +267,7 @@ footer{margin-top:28px;font-size:11px;color:var(--muted);max-width:75ch;display:
       <option value="sym">Symbol A–Z</option>
       <option value="px-desc">Price high–low</option>
     </select>
+    <button class="btn" type="button" id="importBtn" aria-haspopup="dialog">Import list</button>
     <button class="btn" type="button" id="catsBtn" aria-haspopup="dialog">Categories</button>
   </div>
 </div>
@@ -273,6 +277,7 @@ footer{margin-top:28px;font-size:11px;color:var(--muted);max-width:75ch;display:
   <p>Add the stocks and crypto you want to follow. Your board, categories and alerts are saved in this browser, so everyone who opens the link builds their own.</p>
   <div class="quick" id="quick"></div>
   <div class="row-gap" style="justify-content:center">
+    <button class="btn" type="button" id="importBtn2" aria-haspopup="dialog">Paste a list</button>
     <button class="btn" type="button" id="starterBtn">Load a sample watchlist</button>
   </div>
 </section>
@@ -339,6 +344,20 @@ footer{margin-top:28px;font-size:11px;color:var(--muted);max-width:75ch;display:
   </div>
 </div>
 
+<!-- Import -->
+<div class="modal" id="importDlg" hidden role="dialog" aria-modal="true" aria-labelledby="importTitle">
+  <div class="modal-card narrow">
+    <div class="sh-head"><h2 id="importTitle">Import a list</h2><button class="btn" type="button" data-close>Close</button></div>
+    <p class="msg">Paste tickers from anywhere, one per line or separated by commas or spaces. Company names, prices and other text are ignored. Symbols already on your board are skipped.</p>
+    <label for="importText" class="src">Tickers</label>
+    <textarea id="importText" class="field" placeholder="AAPL&#10;NVDA, MSFT, TSLA&#10;BTC-USD"></textarea>
+    <label class="check"><input type="checkbox" id="importCoins" checked> Treat coin tickers such as BTC, ETH and SOL as crypto. Write BTC-USD to force crypto for any coin.</label>
+    <label class="check"><input type="checkbox" id="importCats" checked> Sort familiar symbols into categories (Semis, AI &amp; Cloud, Crypto and others).</label>
+    <div class="row-gap"><button class="btn primary" type="button" id="importGo">Import</button><button class="btn" type="button" id="starterBtn2">Load the sample watchlist instead</button></div>
+    <div class="msg" id="importMsg" role="status" aria-live="polite"></div>
+  </div>
+</div>
+
 <!-- Categories -->
 <div class="modal" id="catsDlg" hidden role="dialog" aria-modal="true" aria-labelledby="catsTitle">
   <div class="modal-card narrow">
@@ -363,7 +382,7 @@ footer{margin-top:28px;font-size:11px;color:var(--muted);max-width:75ch;display:
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
 <script>
 "use strict";
-const VERSION = "1.6.0";
+const VERSION = "1.7.0";
 // ===== YOUR KEYS (only for opening this file locally) ================
 // The hosted site uses keys stored on Netlify. To run this file from your
 // computer instead, paste keys here or into the fields at the top of the page.
@@ -555,7 +574,7 @@ function renderCatSelects(){
 }
 function renderBoard(){
   const empty=!board.items.length;
-  $("emptyState").hidden=!empty; $("boardWrap").hidden=empty; $("tools").hidden=empty && !board.cats.length;
+  $("emptyState").hidden=!empty; $("boardWrap").hidden=empty; $("tools").hidden=empty;
   renderChips(); renderCatSelects();
   sortables.forEach(s=>s.destroy()); sortables=[];
   const q=$("q").value.trim().toLowerCase();
@@ -819,7 +838,10 @@ $("addForm").addEventListener("submit",async e=>{
   e.preventDefault();
   $("addBtn").disabled=true; addMsg("Looking up "+($("addSym").value.trim().toUpperCase()||"symbol")+"…");
   try{ const res=await addSymbol($("addSym").value,addKind,$("addCat").value);
-    if(res){ $("addSym").value=""; addMsg(res.info.unchecked?`Added ${res.item.sym}. Prices appear once a data key is connected.`:`Added ${res.item.name} (${res.item.sym}).`,"ok"); }
+    if(res){ $("addSym").value="";
+      const coin=res.item.kind==="stock" && COIN_NAMES[res.item.sym];
+      addMsg(res.info.unchecked?`Added ${res.item.sym}. Prices appear once a data key is connected.`
+        : `Added ${res.item.name} (${res.item.sym}).`+(coin?` Looking for ${coin} itself? Switch to Crypto and add ${res.item.sym} there.`:""), coin?"":"ok"); }
   }catch(err){ addMsg(err.message||"Couldn't add that. Try again.","err"); }
   finally{ $("addBtn").disabled=false; }
 });
@@ -829,15 +851,72 @@ $("quick").addEventListener("click",async e=>{
   try{ await addSymbol(b.dataset.sym,b.dataset.kind,null); toast("Added "+b.dataset.sym,"Keep adding, or use the box above for any ticker."); }
   catch(err){ toast("Couldn't add "+b.dataset.sym,err.message); b.disabled=false; }
 });
-$("starterBtn").addEventListener("click",()=>{
-  const names=[...new Set(STARTER.map(r=>r[2]))];
-  names.forEach(n=>{ if(!board.cats.some(c=>c.name===n)) board.cats.push({id:uid(),name:n}); });
-  const idOf=n=>board.cats.find(c=>c.name===n).id;
-  STARTER.forEach(([sym,name,cat,otc])=>{ if(!itemByKey(sym)&&board.items.length<MAX_ITEMS) insertItem({key:sym,sym,kind:"stock",name,otc:!!otc,cat:idOf(cat)}); });
-  STARTER_CRYPTO.forEach(sym=>{ const key=sym+"/USD"; if(!itemByKey(key)&&board.items.length<MAX_ITEMS) insertItem({key,sym,kind:"crypto",name:COIN_NAMES[sym],otc:false,cat:idOf("Crypto")}); });
-  saveBoard(); renderBoard(); startLive(); pollCrypto(); pollOTC();
-  toast("Sample watchlist loaded","Remove anything you don't want, rename the categories, or drag cards around.");
-});
+function catIdFor(name){ let c=board.cats.find(x=>x.name===name); if(!c){ c={id:uid(),name}; board.cats.push(c); } return c.id; }
+function afterBulkAdd(){ saveBoard(); renderBoard(); startLive(); pollCrypto(); pollOTC(); if(hasAlp()) pollSnapshots(); }
+function loadStarter(){
+  let n=0;
+  STARTER.forEach(([sym,name,cat,otc])=>{ if(!itemByKey(sym)&&board.items.length<MAX_ITEMS){ insertItem({key:sym,sym,kind:"stock",name,otc:!!otc,cat:catIdFor(cat)}); n++; } });
+  STARTER_CRYPTO.forEach(sym=>{ const key=sym+"/USD"; if(!itemByKey(key)&&board.items.length<MAX_ITEMS){ insertItem({key,sym,kind:"crypto",name:COIN_NAMES[sym],otc:false,cat:catIdFor("Crypto")}); n++; } });
+  afterBulkAdd();
+  toast(n?"Sample watchlist loaded":"Nothing new to add", n?`Added ${n} symbols. Remove anything you don't want, rename the categories, or drag cards around.`:"Everything in the sample watchlist is already on your board.");
+}
+$("starterBtn").addEventListener("click",loadStarter);
+
+// ---------- Import a pasted list ----------
+// A line counts only if every word on it looks like a ticker, so names such
+// as "ASML Holding NV" or "Global X Copper Miners ETF" are ignored.
+function parseList(text,coinsAsCrypto){
+  const out=[], seen=new Set();
+  for(const line of String(text).split(/\r?\n/)){
+    const toks=line.trim().split(/[\s,;]+/).filter(Boolean).map(t=>t.replace(/^\$/,""));
+    if(!toks.length || !toks.every(t=>TICKER.test(t)||/^[A-Z0-9]{1,10}[-/]USDT?$/.test(t))) continue;
+    for(const t of toks){
+      let sym=t, kind="stock"; const m=t.match(/^([A-Z0-9]{1,10})[-/]USDT?$/);
+      if(m){ sym=m[1]; kind="crypto"; } else if(coinsAsCrypto && COIN_NAMES[t]) kind="crypto";
+      const key=kind==="crypto"?sym+"/USD":sym;
+      if(!seen.has(key)){ seen.add(key); out.push({sym,kind,key}); }
+    }
+  }
+  return out;
+}
+function importMsg(t,k){ const m=$("importMsg"); m.textContent=t; m.className="msg"+(k?" "+k:""); }
+async function importList(){
+  const parsed=parseList($("importText").value,$("importCoins").checked);
+  if(!parsed.length){ importMsg("No tickers found. Put each ticker on its own line, or separate them with commas.","err"); return; }
+  const skipped=parsed.filter(i=>itemByKey(i.key)).length;
+  let todo=parsed.filter(i=>!itemByKey(i.key));
+  const room=MAX_ITEMS-board.items.length, overflow=Math.max(0,todo.length-room); todo=todo.slice(0,Math.max(0,room));
+  if(!todo.length){ importMsg(skipped?"Everything in that list is already on your board.":`Your board is full (${MAX_ITEMS} items). Remove some first.`,"err"); return; }
+  const useCats=$("importCats").checked, known=new Map(STARTER.map(r=>[r[0],r]));
+  const results=new Array(todo.length), failed=[]; let done=0, next=0;
+  $("importGo").disabled=true; importMsg(`Adding 0 of ${todo.length}…`);
+  async function worker(){
+    while(next<todo.length){
+      const i=next++, t=todo[i];
+      try{
+        if(t.kind==="stock" && known.has(t.sym)){ const r=known.get(t.sym); results[i]={...t,name:r[1],otc:!!r[3],catName:useCats?r[2]:null}; }
+        else if(t.kind==="crypto" && COIN_NAMES[t.sym]){ results[i]={...t,name:COIN_NAMES[t.sym],otc:false,catName:useCats?"Crypto":null}; }
+        else { const info=await lookup(t.sym,t.kind); results[i]={...t,name:info.name,otc:!!info.otc,catName:useCats&&t.kind==="crypto"?"Crypto":null}; }
+      }catch(e){ failed.push(t.sym); }
+      importMsg(`Adding ${++done} of ${todo.length}…`);
+    }
+  }
+  await Promise.all([worker(),worker(),worker(),worker()]);
+  let added=0;
+  results.forEach(r=>{ if(r && !itemByKey(r.key)){ insertItem({key:r.key,sym:r.sym,kind:r.kind,name:r.name,otc:r.otc,cat:r.catName?catIdFor(r.catName):null}); added++; } });
+  afterBulkAdd(); $("importGo").disabled=false;
+  const parts=[`Added ${added} symbol${added===1?"":"s"}.`];
+  if(skipped) parts.push(`${skipped} already on your board.`);
+  if(failed.length) parts.push(`Couldn't find: ${failed.join(", ")}.`);
+  if(overflow) parts.push(`${overflow} left out because the board holds ${MAX_ITEMS} items.`);
+  importMsg(parts.join(" "), added?"ok":"err");
+  if(added){ $("importText").value=""; toast(`Imported ${added} symbol${added===1?"":"s"}`, failed.length?`Couldn't find ${failed.join(", ")}.`:"Drag cards to arrange them, or open Categories to rename groups."); }
+}
+function openImport(){ importMsg(""); openModal($("importDlg"),$("importText")); }
+$("importBtn").addEventListener("click",openImport);
+$("importBtn2").addEventListener("click",openImport);
+$("importGo").addEventListener("click",importList);
+$("starterBtn2").addEventListener("click",()=>{ closeModal($("importDlg")); loadStarter(); });
 function removeItem(key){
   const idx=board.items.findIndex(i=>i.key===key); if(idx<0) return;
   const item=board.items[idx], alerts=board.alerts.filter(a=>a.key===key);
