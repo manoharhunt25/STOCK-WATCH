@@ -96,7 +96,7 @@ STOCK-WATCH/
 
 1. Sign up at [dash.cloudflare.com](https://dash.cloudflare.com).
 2. Go to **Workers & Pages → Create → Import a repository**, connect GitHub and pick this repository. The Worker name must be `stock-watch` (or change `name` in `wrangler.jsonc` to match). Leave the build command empty; the deploy command is `npx wrangler deploy`.
-3. Open the Worker's **Settings → Variables and Secrets**, choose **Add**, set the type to **Secret**, and add:
+3. Open the Worker's **Settings → Variables and Secrets**, choose **Add**, set the type to **Secret** (not Text), and add:
 
 | Name | Value |
 |---|---|
