@@ -379,10 +379,10 @@ footer{margin-top:28px;font-size:11px;color:var(--muted);max-width:75ch;display:
   <span>Your board, categories and alerts are stored in this browser only. Not investment advice. <span id="verFoot"></span></span>
 </footer>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+<script src="vendor/sortable.min.js"></script>
 <script>
 "use strict";
-const VERSION = "1.7.0";
+const VERSION = "1.7.1";
 // ===== YOUR KEYS (only for opening this file locally) ================
 // The hosted site uses keys stored on Netlify. To run this file from your
 // computer instead, paste keys here or into the fields at the top of the page.
@@ -565,9 +565,8 @@ function renderChips(){
 }
 $("chips").addEventListener("click",e=>{ const b=e.target.closest(".chip"); if(!b) return; filterCat=b.dataset.id; store.set("sw.filter",filterCat); renderBoard(); });
 function renderCatSelects(){
-  const opts=`<option value="">Unsorted</option>`+board.cats.map(c=>`<option value="${c.id}"></option>`).join("");
-  for(const id of ["addCat","shCat"]){ const sel=$(id), keep=sel.value; sel.innerHTML=opts;
-    [...sel.options].forEach(o=>{ if(o.value) o.textContent=catName(o.value); });
+  for(const id of ["addCat","shCat"]){ const sel=$(id), keep=sel.value;
+    sel.replaceChildren(new Option("Unsorted",""), ...board.cats.map(c=>new Option(c.name,c.id)));
     sel.value=[...sel.options].some(o=>o.value===keep)?keep:""; }
   $("addCat").hidden=!board.cats.length;
   if(!board.cats.length) $("addCat").value="";
@@ -694,7 +693,7 @@ async function alpGet(path,params){
     r=await fetch(url);
   } else r=await fetch(ALP+path+"?"+new URLSearchParams(params),{headers:{"APCA-API-KEY-ID":alpId,"APCA-API-SECRET-KEY":alpSec}});
   if(r.status===401||r.status===403) throw Object.assign(new Error("The data provider rejected the key. Check the Key ID and Secret."),{auth:true});
-  if(r.status===429) throw Object.assign(new Error("Rate limit reached. Try again in a minute."),{rate:true});
+  if(r.status===429) throw Object.assign(new Error("Too many requests right now. Try again in a minute."),{rate:true});
   if(!r.ok){ let msg="Data error "+r.status; try{ const j=await r.json(); if(j.message) msg=j.message; }catch(e){} throw new Error(msg); }
   return r.json();
 }
