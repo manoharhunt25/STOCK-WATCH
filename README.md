@@ -1,6 +1,6 @@
 # STOCK Watch
 
-[![Version](https://img.shields.io/badge/version-1.7.0-2f6fd6)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.7.1-2f6fd6)](CHANGELOG.md)
 [![Cloudflare Workers](https://img.shields.io/badge/hosted%20on-Cloudflare%20Workers-f38020)](https://developers.cloudflare.com/workers/)
 
 A live market board you build yourself. Add the stocks, ETFs and crypto you care about, group them into your own categories, arrange them by dragging, and set price alerts in both directions.
@@ -34,7 +34,7 @@ flowchart LR
     W -->|key from secrets| T[Twelve Data<br/>OTC quotes, pre-2016 history]
 ```
 
-- **`public/index.html`** is the whole app: HTML, CSS and JavaScript in one file, with no build step. The only external script is [SortableJS](https://github.com/SortableJS/Sortable) (from cdnjs) for drag and drop.
+- **`public/index.html`** is the whole app: HTML, CSS and JavaScript in one file, with no build step. Drag and drop uses [SortableJS](https://github.com/SortableJS/Sortable) (MIT), served from `public/vendor/` rather than a third-party CDN. `public/_headers` sets the page's security headers.
 - **`src/api.js`** holds all the API logic. It uses only web-standard `fetch`, `Request` and `Response`, so the same file runs on Cloudflare and Netlify. It accepts only well-formed symbols on fixed routes and marks short-lived responses as cacheable at the edge.
 - **`src/worker.js`** is the Cloudflare entry point. Cloudflare serves `public/` directly; the Worker runs only for `/api/*` and shares cached responses between visitors.
 - **`netlify/functions/api.mts`** is a thin Netlify wrapper around the same `src/api.js`, kept so the app can still be hosted on Netlify.
@@ -71,7 +71,9 @@ Array order is display order. Stocks added with v1.1's "Add stock" (`sw.custom`)
 ```
 STOCK-WATCH/
 ├── public/
-│   └── index.html            # the app (served as static files)
+│   ├── index.html            # the app (served as static files)
+│   ├── _headers              # security headers for the page
+│   └── vendor/               # SortableJS (MIT), self-hosted
 ├── src/
 │   ├── api.js                # API logic shared by both hosts
 │   └── worker.js             # Cloudflare Worker entry point
@@ -140,10 +142,14 @@ Open `public/index.html` in a browser, paste your keys into the fields at the to
 
 ## Security
 
-- API keys are stored only as Cloudflare secrets (or Netlify environment variables) and used by the server code. They never reach the browser and are not in this repository.
-- The proxy accepts only well-formed symbols (at most 80 stocks or 40 crypto pairs per request) on fixed routes, so it can't be used as a general relay. Short-lived responses are cached at the edge and shared between visitors to stay within the free tiers.
-- Visitors' boards and alerts never leave their browser.
-- If a key is ever exposed, regenerate it at the provider and update the secret on your host (on Netlify, redeploy afterwards).
+- **Keys stay on the server.** API keys are stored only as Cloudflare secrets (or Netlify environment variables) and used by the server code. They never reach the browser and have never been committed to this repository.
+- **Narrow API.** The proxy accepts only GET requests to fixed routes with well-formed symbols (at most 80 stocks or 40 crypto pairs per request), so it can't be used as a general relay. Provider keys are trimmed and never echoed back.
+- **Rate limits.** On Cloudflare, each visitor (by IP) is limited to 150 API requests a minute, and 20 a minute for the Twelve Data routes, which protects the shared daily quotas from scripted abuse. Normal use is about 12 a minute.
+- **Edge caching.** Short-lived responses are cached and shared between visitors to stay within the free tiers.
+- **Browser hardening.** A Content Security Policy limits the page to its own scripts and to the data providers it talks to, and blocks framing (clickjacking), plugins and form submissions elsewhere. API responses carry `nosniff` and `Cross-Origin-Resource-Policy: same-origin`. No third-party scripts are loaded.
+- **Untrusted text.** Names and messages from the data providers, and anything saved in the browser, are inserted as text rather than HTML.
+- **Private boards.** Visitors' boards, categories and alerts never leave their browser.
+- **If a key is exposed**, regenerate it at the provider and update the secret on your host (on Netlify, redeploy afterwards).
 
 ## Known limitations
 

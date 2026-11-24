@@ -3,6 +3,19 @@
 All notable changes to STOCK Watch are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.1] - 2026-11-23
+
+### Security
+- Per-visitor rate limits on the Cloudflare API: 150 requests a minute, 20 a minute for the Twelve Data routes.
+- Security headers for the page via `public/_headers`: Content Security Policy, frame blocking, `nosniff`, referrer and permissions policies, HSTS.
+- API responses add `X-Content-Type-Options: nosniff` and `Cross-Origin-Resource-Policy: same-origin`.
+- SortableJS is now served from the site itself instead of a third-party CDN.
+- Category menus are built from text nodes instead of HTML strings.
+
+### Fixed
+- Provider keys are trimmed, so a stray space or line break pasted into a secret no longer causes "Key rejected".
+- Deploys from Git no longer remove variables added in the Cloudflare dashboard (`keep_vars`).
+
 ## [1.7.0] - 2026-11-23
 
 ### Added
@@ -59,6 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Netlify Function proxy that keeps API keys on the server so anyone with the link gets live data.
 - Light and dark themes and a phone layout.
 
+[1.7.1]: https://github.com/manoharhunt25/STOCK-WATCH/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/manoharhunt25/STOCK-WATCH/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/manoharhunt25/STOCK-WATCH/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/manoharhunt25/STOCK-WATCH/compare/v1.1.0...v1.5.0
