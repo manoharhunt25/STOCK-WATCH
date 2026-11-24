@@ -14,5 +14,11 @@
     "binding": "ASSETS",
     "run_worker_first": ["/api/*"]
   },
+  // Per-visitor request limits (counted per IP, per Cloudflare location).
+  // Normal use is ~12 requests a minute; importing a long list adds a burst.
+  "ratelimits": [
+    { "name": "API_LIMIT", "namespace_id": "1701", "simple": { "limit": 150, "period": 60 } },
+    { "name": "TD_LIMIT", "namespace_id": "1702", "simple": { "limit": 20, "period": 60 } }
+  ],
   "observability": { "enabled": true }
 }

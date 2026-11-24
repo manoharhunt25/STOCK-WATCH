@@ -27,9 +27,12 @@ function cached(seconds) {
     // Browsers revalidate; edge caches (Cloudflare, Netlify) keep it briefly.
     "Cache-Control": `public, max-age=0, s-maxage=${seconds}`,
     "Netlify-CDN-Cache-Control": `public, s-maxage=${seconds}, stale-while-revalidate=${seconds}, durable`,
+    ...SECURITY,
   };
 }
-const noStore = { "content-type": "application/json", "Cache-Control": "no-store" };
+const noStore = { "content-type": "application/json", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Cross-Origin-Resource-Policy": "same-origin" };
+// Added to every API response: don't sniff types, and don't let other sites embed responses
+const SECURITY = { "X-Content-Type-Options": "nosniff", "Cross-Origin-Resource-Policy": "same-origin" };
 const json = (body, status, headers) => new Response(JSON.stringify(body), { status, headers });
 const fail = (message, status) => json({ message }, status, noStore);
 
